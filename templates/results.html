@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Attendance Results - Smart Attendance</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="nav-header">
+        <h1>✅ Attendance Results</h1>
+        <p class="user-info">Class: {{ session.class if session.class else 'All Classes' }}</p>
+      </div>
+
+      <div class="stats-container">
+        <div class="stat-card">
+          <div class="stat-number" style="color: #38a169;">
+            {{ present.values()|list|selectattr("equalto", "Present")|list|length }}
+          </div>
+          <div class="stat-label">Present</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" style="color: #e53e3e;">
+            {{ present.values()|list|selectattr("equalto", "Absent")|list|length }}
+          </div>
+          <div class="stat-label">Absent</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number">{{ present|length }}</div>
+          <div class="stat-label">Total Students</div>
+        </div>
+      </div>
+      <!-- Add this after the stats-container in results.html -->
+      {% if image_count %}
+      <div style="background: #e6fffa; padding: 15px; border-radius: 10px; margin: 20px 0;">
+        <h4 style="color: #2d3748;">📸 Enhanced Accuracy Mode</h4>
+        <p style="color: #4a5568;">
+          Attendance processed from <strong>{{ image_count }} classroom images</strong>
+          for improved recognition accuracy.
+        </p>
+      </div>
+      {% endif %}
+
+      <h2>📋 Detailed Attendance</h2>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>👤 Student Name</th>
+              <th>📊 Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for student, status in present.items() %}
+            <tr>
+              <td>{{ student }}</td>
+              <td>
+                <span class="{{ status|lower }}">{{ status }}</span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="action-buttons">
+        <a class="btn btn-large btn-success" href="/download_report/{{ report_file }}">
+          📥 Download Excel Report
+        </a>
+        <a class="btn btn-large btn-primary" href="{{ url_for('index') }}">
+          🏠 Back to Dashboard
+        </a>
+        <a class="btn btn-large btn-warning" href="{{ url_for('view_attendance') }}">
+          📊 View All Reports
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

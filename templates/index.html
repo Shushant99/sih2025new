@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard - Smart Attendance System</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="nav-header">
+        <div>
+          <h1>📚 Smart Attendance Dashboard</h1>
+          <p class="user-info">Welcome, {{ session.userid }} 
+            {% if session.class %} (Class: {{ session.class }}){% endif %}
+          </p>
+        </div>
+        <a href="{{ url_for('logout') }}" class="btn btn-danger logout-btn">Logout</a>
+      </div>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flash-messages">
+            {% for msg in messages %}
+              <li class="{% if 'success' in msg.lower() %}flash-success{% endif %}">{{ msg }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+
+      {% if session.role == 'teacher' %}
+        <h2>🍎 Teacher Portal</h2>
+        <p class="subtitle">Manage classroom attendance and view reports</p>
+        
+        <div class="camera-section">
+          <h3>📷 Live Camera Capture</h3>
+          <p style="color: #718096; margin-bottom: 15px;">
+            Take a single live photo for quick attendance marking
+          </p>
+          <video id="video" width="640" height="480" autoplay></video>
+          <br />
+          <button class="btn capture-btn" onclick="captureImage()">📸 Quick Capture</button>
+        </div>
+
+        <div class="dashboard-grid">
+          <div class="feature-card">
+            <div class="feature-icon">📊</div>
+            <h3>View Reports</h3>
+            <p>Access attendance reports and analytics for your class</p>
+            <a href="{{ url_for('view_attendance') }}" class="btn btn-primary">View Reports</a>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">📸</div>
+            <h3>Multiple Images</h3>
+            <p>Upload multiple classroom photos for enhanced attendance accuracy</p>
+            <a href="{{ url_for('upload_classroom_images') }}" class="btn btn-success">Upload Images</a>
+          </div>
+          
+          <div class="feature-card">
+            <div class="feature-icon">👥</div>
+            <h3>Class Information</h3>
+            <p>Your assigned class: <strong>{{ session.class if session.class else 'Not Assigned' }}</strong></p>
+            <div style="margin-top: 15px;">
+              {% if session.class %}
+                <p style="color: #38a169; font-weight: bold;">✅ Class Assigned</p>
+              {% else %}
+                <p style="color: #e53e3e; font-weight: bold;">❌ No Class Assigned</p>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="feature-card">
+            <div class="feature-icon">⚡</div>
+            <h3>Quick Actions</h3>
+            <p>Frequently used teacher tools and shortcuts</p>
+            <div style="margin-top: 15px;">
+              <button class="btn btn-warning" onclick="captureImage()" style="margin: 5px;">📷 Quick Capture</button>
+              <a href="{{ url_for('view_attendance') }}" class="btn btn-primary" style="margin: 5px;">📊 Reports</a>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #f0f8ff; padding: 20px; border-radius: 10px; margin-top: 30px;">
+          <h3 style="color: #2d3748; margin-bottom: 10px;">📋 Attendance Methods:</h3>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+            <div style="background: white; padding: 15px; border-radius: 8px;">
+              <h4 style="color: #667eea;">📸 Quick Capture</h4>
+              <p style="color: #4a5568; font-size: 14px;">Use live camera above for instant single-photo attendance</p>
+            </div>
+            <div style="background: white; padding: 15px; border-radius: 8px;">
+              <h4 style="color: #38a169;">🖼️ Multiple Images</h4>
+              <p style="color: #4a5568; font-size: 14px;">Upload 3-5 classroom photos for enhanced accuracy</p>
+            </div>
+          </div>
+        </div>
+
+      {% elif session.role == 'admin' %}
+        <div style="text-align: center;">
+          <h2>⚙️ Administrator Panel</h2>
+          <p class="subtitle">Complete system management and oversight</p>
+          
+          <div class="stats-container" style="margin: 30px 0;">
+            <div class="stat-card">
+              <div class="stat-number" style="color: #667eea;">Admin</div>
+              <div class="stat-label">Access Level</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number" style="color: #38a169;">Active</div>
+              <div class="stat-label">System Status</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-number" style="color: #ed8936;">{{ session.userid }}</div>
+              <div class="stat-label">Current User</div>
+            </div>
+          </div>
+          
+          <a href="{{ url_for('admin_dashboard') }}" class="btn btn-large btn-primary">
+            🚀 Enter Admin Dashboard
+          </a>
+          
+          <div style="background: #fff5f5; padding: 20px; border-radius: 10px; margin-top: 20px;">
+            <h4 style="color: #2d3748;">🔧 Admin Capabilities:</h4>
+            <ul style="color: #4a5568; text-align: left; line-height: 1.6;">
+              <li>Manage student registrations and sample images</li>
+              <li>Create and assign teacher accounts</li>
+              <li>View attendance reports across all classes</li>
+              <li>System configuration and user management</li>
+            </ul>
+          </div>
+        </div>
+
+      {% else %}
+        <div style="text-align: center; background: #fed7d7; padding: 30px; border-radius: 10px;">
+          <h2 style="color: #c53030;">⚠️ Access Error</h2>
+          <p style="color: #742a2a;">Your account role is not recognized. Please contact administrator.</p>
+          <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout and Try Again</a>
+        </div>
+      {% endif %}
+    </div>
+
+    <!-- Hidden form for image capture -->
+    <form id="captureForm" action="{{ url_for('capture_image') }}" method="POST" style="display: none;">
+      <input type="hidden" name="image" id="imageData" />
+    </form>
+  </div>
+
+  {% if session.role == 'teacher' %}
+  <script>
+    const video = document.getElementById("video");
+
+    // Start camera
+    navigator.mediaDevices
+      .getUserMedia({ video: true })
+      .then((stream) => {
+        video.srcObject = stream;
+        console.log("Camera started successfully");
+      })
+      .catch((err) => {
+        console.error("Camera error:", err);
+        document.querySelector('.camera-section').innerHTML = `
+          <h3>📷 Live Camera Capture</h3>
+          <div style="background: #fed7d7; padding: 20px; border-radius: 10px; color: #c53030; margin: 20px 0;">
+            <p><strong>Camera Not Available</strong></p>
+            <p>Please check camera permissions or use the "Multiple Images" option instead.</p>
+          </div>
+          <a href="{{ url_for('upload_classroom_images') }}" class="btn btn-success">📸 Upload Images Instead</a>
+        `;
+      });
+
+    // Capture image function
+    function captureImage() {
+      if (!video.srcObject) {
+        alert("Camera is not available. Please use the 'Multiple Images' option instead.");
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      
+      if (canvas.width === 0 || canvas.height === 0) {
+        alert("Camera is not ready. Please wait and try again.");
+        return;
+      }
+      
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = canvas.toDataURL("image/jpeg");
+      document.getElementById("imageData").value = imageData;
+      
+      // Visual feedback
+      const buttons = document.querySelectorAll('button[onclick="captureImage()"]');
+      buttons.forEach(btn => {
+        const originalText = btn.textContent;
+        btn.textContent = "📸 Processing...";
+        btn.disabled = true;
+      });
+      
+      document.getElementById("captureForm").submit();
+    }
+
+    // Check camera status periodically
+    setInterval(() => {
+      const video = document.getElementById("video");
+      if (video && video.readyState >= 2) {
+        // Camera is ready
+        document.querySelectorAll('button[onclick="captureImage()"]').forEach(btn => {
+          btn.disabled = false;
+        });
+      }
+    }, 1000);
+  </script>
+  {% endif %}
+</body>
+</html>

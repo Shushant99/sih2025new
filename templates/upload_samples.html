@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Student Registration - Smart Attendance</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <style>
+    .captured-images-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+    
+    .captured-image-item {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .captured-image-item img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+    }
+    
+    .remove-image-btn {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background: #e53e3e;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 25px;
+      height: 25px;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .capture-counter {
+      background: #38a169;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 15px;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+    
+    .camera-controls {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="nav-header">
+        <h1>👥 Student Registration</h1>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary">← Back to Dashboard</a>
+      </div>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flash-messages">
+            {% for msg in messages %}
+              <li class="{% if 'success' in msg.lower() %}flash-success{% endif %}">{{ msg }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+
+      <form id="uploadForm" action="{{ url_for('upload_samples') }}" method="POST" enctype="multipart/form-data">
+        <div class="dashboard-grid">
+          <div class="feature-card">
+            <h3>📋 Student Information</h3>
+            <div class="form-group">
+              <label for="class_name">🏫 Class Name</label>
+              <input type="text" id="class_name" name="class_name" placeholder="e.g., class101" required />
+            </div>
+            
+            <div class="form-group">
+              <label for="student_name">👤 Student Name</label>
+              <input type="text" id="student_name" name="student_name" placeholder="e.g., John Doe" required />
+            </div>
+            
+            <div class="form-group">
+              <label for="sample_images">📷 Upload Sample Images</label>
+              <input type="file" id="sample_images" name="sample_images" accept="image/*" multiple />
+              <small style="color: #718096;">Select multiple photos of the student</small>
+            </div>
+          </div>
+
+          <div class="feature-card">
+            <h3>📸 Camera Capture 
+              <span id="captureCounter" class="capture-counter">0 Photos</span>
+            </h3>
+            <div class="camera-section">
+              <video id="video" width="320" height="240" autoplay></video>
+              <canvas id="canvas" width="320" height="240" style="display:none;"></canvas>
+              
+              <div class="camera-controls">
+                <button type="button" class="btn btn-success" onclick="capturePhoto()">
+                  📷 Capture Photo
+                </button>
+                <button type="button" class="btn btn-warning" onclick="clearAllCaptured()">
+                  🗑️ Clear All
+                </button>
+              </div>
+            </div>
+            
+            <!-- Hidden container for captured images data -->
+            <div id="capturedImagesContainer"></div>
+            
+            <!-- Preview container for captured images -->
+            <div id="previewContainer">
+              <h4 style="margin-top: 20px; color: #2d3748;">📸 Captured Photos:</h4>
+              <div id="capturedImagesGrid" class="captured-images-grid"></div>
+              <p id="noPhotosMessage" style="color: #718096; text-align: center; margin-top: 10px;">
+                No photos captured yet. Use the camera above to take multiple photos.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div style="background: #f7fafc; padding: 20px; border-radius: 10px; margin: 20px 0;">
+          <h4 style="color: #2d3748; margin-bottom: 10px;">📝 Registration Guidelines:</h4>
+          <ul style="color: #4a5568; line-height: 1.6;">
+            <li>Take <strong>3-5 different photos</strong> of the student for better recognition</li>
+            <li>Ensure good lighting and clear face visibility</li>
+            <li>Capture from different angles (front, slight left/right)</li>
+            <li>Avoid blurry or extremely close/far photos</li>
+            <li>Both file uploads and camera captures will be used</li>
+          </ul>
+        </div>
+
+        <div class="action-buttons">
+          <button type="submit" class="btn btn-large btn-success">✅ Register Student</button>
+          <button type="reset" class="btn btn-large btn-warning" onclick="resetForm()">🔄 Clear Form</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const capturedImagesGrid = document.getElementById("capturedImagesGrid");
+    const capturedImagesContainer = document.getElementById("capturedImagesContainer");
+    const captureCounter = document.getElementById("captureCounter");
+    const noPhotosMessage = document.getElementById("noPhotosMessage");
+
+    let capturedImages = [];
+    let imageCounter = 0;
+
+    // Start camera
+    navigator.mediaDevices
+      .getUserMedia({ video: true })
+      .then((stream) => {
+        video.srcObject = stream;
+      })
+      .catch((err) => {
+        document.querySelector('.camera-section').innerHTML = 
+          '<p style="color: #e53e3e;">Camera not available: ' + err + '</p>';
+      });
+
+    // Capture multiple photos
+    function capturePhoto() {
+      const context = canvas.getContext("2d");
+      context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const imageData = canvas.toDataURL("image/jpeg");
+      const imageId = 'captured_' + Date.now() + '_' + imageCounter++;
+      
+      // Store the captured image
+      capturedImages.push({
+        id: imageId,
+        data: imageData
+      });
+
+      // Create hidden input for this image
+      const hiddenInput = document.createElement('input');
+      hiddenInput.type = 'hidden';
+      hiddenInput.name = 'captured_images';
+      hiddenInput.value = imageData;
+      hiddenInput.id = imageId + '_input';
+      capturedImagesContainer.appendChild(hiddenInput);
+
+      // Create preview element
+      const imagePreview = document.createElement('div');
+      imagePreview.className = 'captured-image-item';
+      imagePreview.id = imageId + '_preview';
+      imagePreview.innerHTML = `
+        <img src="${imageData}" alt="Captured ${capturedImages.length}">
+        <button type="button" class="remove-image-btn" onclick="removeImage('${imageId}')">×</button>
+      `;
+
+      capturedImagesGrid.appendChild(imagePreview);
+      updateUI();
+
+      // Visual feedback
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = "✅ Photo Captured!";
+      btn.style.background = "#38a169";
+      setTimeout(() => {
+        btn.textContent = originalText;
+        btn.style.background = "";
+      }, 1500);
+    }
+
+    // Remove a specific captured image
+    function removeImage(imageId) {
+      // Remove from array
+      capturedImages = capturedImages.filter(img => img.id !== imageId);
+      
+      // Remove hidden input
+      const hiddenInput = document.getElementById(imageId + '_input');
+      if (hiddenInput) {
+        hiddenInput.remove();
+      }
+      
+      // Remove preview
+      const preview = document.getElementById(imageId + '_preview');
+      if (preview) {
+        preview.remove();
+      }
+      
+      updateUI();
+    }
+
+    // Clear all captured images
+    function clearAllCaptured() {
+      capturedImages = [];
+      capturedImagesGrid.innerHTML = '';
+      capturedImagesContainer.innerHTML = '';
+      imageCounter = 0;
+      updateUI();
+    }
+
+    // Update UI elements
+    function updateUI() {
+      const count = capturedImages.length;
+      captureCounter.textContent = `${count} Photo${count !== 1 ? 's' : ''}`;
+      
+      if (count === 0) {
+        noPhotosMessage.style.display = 'block';
+      } else {
+        noPhotosMessage.style.display = 'none';
+      }
+      
+      // Update counter color based on count
+      if (count === 0) {
+        captureCounter.style.background = '#718096';
+      } else if (count < 3) {
+        captureCounter.style.background = '#ed8936';
+      } else {
+        captureCounter.style.background = '#38a169';
+      }
+    }
+
+    // Reset form
+    function resetForm() {
+      clearAllCaptured();
+      document.getElementById('uploadForm').reset();
+    }
+
+    // Form validation before submission
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+      const fileInput = document.getElementById('sample_images');
+      const hasFiles = fileInput.files.length > 0;
+      const hasCapturedImages = capturedImages.length > 0;
+      
+      if (!hasFiles && !hasCapturedImages) {
+        e.preventDefault();
+        alert('Please either upload files or capture at least one photo using the camera.');
+        return false;
+      }
+      
+      if (capturedImages.length > 0 && capturedImages.length < 2) {
+        const confirmSubmit = confirm('You have only captured ' + capturedImages.length + ' photo. For better recognition, it\'s recommended to capture at least 2-3 photos. Do you want to continue?');
+        if (!confirmSubmit) {
+          e.preventDefault();
+          return false;
+        }
+      }
+    });
+
+    // Initialize UI
+    updateUI();
+  </script>
+</body>
+</html>

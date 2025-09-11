@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Add User - Smart Attendance</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="nav-header">
+        <h1>👨‍🏫 Add New User</h1>
+        <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary">← Back to Dashboard</a>
+      </div>
+      
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flash-messages">
+            {% for msg in messages %}
+              <li class="{% if 'success' in msg.lower() %}flash-success{% endif %}">{{ msg }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+
+      <form method="POST" action="{{ url_for('add_teacher') }}">
+        <div class="dashboard-grid">
+          <div class="feature-card">
+            <h3>👤 User Information</h3>
+            <div class="form-group">
+              <label for="userid">🆔 User ID</label>
+              <input type="text" id="userid" name="userid" placeholder="e.g., teacher3" required />
+            </div>
+            
+            <div class="form-group">
+              <label for="password">🔐 Password</label>
+              <input type="password" id="password" name="password" placeholder="Enter secure password" required />
+            </div>
+            
+            <div class="form-group">
+              <label for="role">📋 Role</label>
+              <select id="role" name="role" required onchange="toggleClassField()">
+                <option value="">Select role</option>
+                <option value="teacher">Teacher</option>
+                <option value="admin">Administrator</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="feature-card">
+            <h3>🏫 Assignment Information</h3>
+            <div class="form-group" id="classGroup" style="display: none;">
+              <label for="class">🎓 Assigned Class</label>
+              <input type="text" id="class" name="class" placeholder="e.g., class101" />
+              <small style="color: #718096;">Required for teacher accounts</small>
+            </div>
+            
+            <div style="margin-top: 20px; padding: 15px; background: #f7fafc; border-radius: 10px;">
+              <h4 style="margin-bottom: 10px; color: #2d3748;">👋 User Guidelines:</h4>
+              <ul style="color: #4a5568; line-height: 1.6;">
+                <li><strong>Teachers:</strong> Can capture attendance and view their class reports</li>
+                <li><strong>Admins:</strong> Full system access including user management</li>
+                <li>Passwords should be at least 8 characters long</li>
+                <li>Class assignment is mandatory for teacher accounts</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button type="submit" class="btn btn-large btn-success">✅ Create User</button>
+          <button type="reset" class="btn btn-large btn-warning">🔄 Clear Form</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function toggleClassField() {
+      const role = document.getElementById('role').value;
+      const classGroup = document.getElementById('classGroup');
+      const classInput = document.getElementById('class');
+      
+      if (role === 'teacher') {
+        classGroup.style.display = 'block';
+        classInput.required = true;
+      } else {
+        classGroup.style.display = 'none';
+        classInput.required = false;
+        classInput.value = '';
+      }
+    }
+  </script>
+</body>
+</html>

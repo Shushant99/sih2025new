@@ -1,0 +1,2 @@
+#this file is for listing the dependencies required for the project.
+pip install flask pillow openpyxl numpy opencv-python torch torchvision facenet-pytorch werkzeug

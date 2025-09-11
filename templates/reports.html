@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Attendance Reports - Smart Attendance</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="nav-header">
+        <h1>📊 Attendance Reports</h1>
+        <div>
+          {% if session.role == 'teacher' %}
+            <a href="{{ url_for('index') }}" class="btn btn-primary">← Back to Dashboard</a>
+          {% else %}
+            <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary">← Back to Dashboard</a>
+          {% endif %}
+        </div>
+      </div>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flash-messages">
+            {% for msg in messages %}
+              <li class="{% if 'success' in msg.lower() %}flash-success{% endif %}">{{ msg }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+
+      {% if session.class %}
+        <p class="subtitle">Reports for {{ session.class }}</p>
+      {% endif %}
+
+      {% if files %}
+        <div class="stats-container">
+          <div class="stat-card">
+            <div class="stat-number">{{ files|length }}</div>
+            <div class="stat-label">Total Reports</div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>📄 Report Name</th>
+                <th>📅 Date</th>
+                <th>⏰ Time</th>
+                <th>🔗 Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for file in files %}
+                {% set file_parts = file.replace('attendance_', '').replace('.xlsx', '').split('_') %}
+                <tr>
+                  <td>{{ file }}</td>
+                  <td>
+                    {% if file_parts|length >= 2 %}
+                      {{ file_parts[-2] }}
+                    {% else %}
+                      Unknown
+                    {% endif %}
+                  </td>
+                  <td>
+                    {% if file_parts|length >= 3 %}
+                      {{ file_parts[-1].replace('-', ':') }}
+                    {% else %}
+                      Unknown
+                    {% endif %}
+                  </td>
+                  <td>
+                    <a href="{{ url_for('download_report', filename=file) }}" class="btn btn-success" style="padding: 8px 15px; font-size: 14px;">📥 Download</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% else %}
+        <div class="feature-card" style="text-align: center; margin-top: 30px;">
+          <div class="feature-icon">📭</div>
+          <h3>No Reports Found</h3>
+          <p>No attendance reports have been generated yet.</p>
+          {% if session.role == 'teacher' %}
+            <a href="{{ url_for('index') }}" class="btn btn-primary">Capture Attendance</a>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

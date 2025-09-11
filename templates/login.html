@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Attendance System - Login</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+  <div class="container">
+    <div class="card login-card">
+      <h1>🎓 Smart Attendance</h1>
+      <p class="subtitle">Automated Classroom Management System</p>
+      
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flash-messages">
+            {% for msg in messages %}
+              <li>{{ msg }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+      
+      <form action="{{ url_for('login') }}" method="POST">
+        <div class="form-group">
+          <label for="userid">👤 User ID</label>
+          <input type="text" name="userid" id="userid" placeholder="Enter your user ID" required />
+        </div>
+        
+        <div class="form-group">
+          <label for="password">🔐 Password</label>
+          <input type="password" name="password" id="password" placeholder="Enter your password" required />
+        </div>
+        
+        <button type="submit" class="btn btn-large" style="width: 100%;">Login to Dashboard</button>
+      </form>
+      
+      <p style="text-align: center; margin-top: 20px; color: #718096; font-size: 14px;">
+        Demo Credentials: admin1/adminpass 
+      </p>
+    </div>
+  </div>
+</body>
+</html>

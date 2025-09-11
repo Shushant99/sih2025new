@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Upload Classroom Images - Smart Attendance</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  <style>
+    .image-preview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 15px;
+      margin-top: 20px;
+    }
+    
+    .preview-item {
+      position: relative;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    
+    .preview-item img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+    }
+    
+    .preview-item .remove-btn {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background: #e53e3e;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 25px;
+      height: 25px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    
+    .upload-zone {
+      border: 3px dashed #cbd5e0;
+      border-radius: 15px;
+      padding: 40px;
+      text-align: center;
+      background: #f7fafc;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+    
+    .upload-zone:hover {
+      border-color: #667eea;
+      background: #edf2f7;
+    }
+    
+    .upload-zone.dragover {
+      border-color: #667eea;
+      background: #e6fffa;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="nav-header">
+        <div>
+          <h1>📸 Upload Classroom Images</h1>
+          <p class="user-info">Class: {{ session.class if session.class else 'Not Assigned' }}</p>
+        </div>
+        <a href="{{ url_for('index') }}" class="btn btn-primary">← Back to Dashboard</a>
+      </div>
+
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}
+          <ul class="flash-messages">
+            {% for msg in messages %}
+              <li class="{% if 'success' in msg.lower() %}flash-success{% endif %}">{{ msg }}</li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      {% endwith %}
+
+      <div style="background: #f0f8ff; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+        <h3 style="color: #2d3748; margin-bottom: 10px;">📋 Instructions for Better Attendance:</h3>
+        <ul style="color: #4a5568; line-height: 1.6;">
+          <li>Take <strong>3-5 photos</strong> of the classroom from different angles</li>
+          <li>Ensure <strong>good lighting</strong> and clear visibility of students' faces</li>
+          <li>Capture from <strong>front, back, and sides</strong> of the classroom</li>
+          <li>Include <strong>all seating areas</strong> where students might be sitting</li>
+          <li>Avoid blurry images or extreme close-ups</li>
+          <li>Multiple images will improve attendance accuracy significantly</li>
+        </ul>
+      </div>
+
+      <form id="uploadForm" action="{{ url_for('upload_classroom_images') }}" method="POST" enctype="multipart/form-data">
+        
+        <div class="feature-card">
+          <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+            <div class="feature-icon" style="font-size: 4em; margin-bottom: 15px;">📷</div>
+            <h3>Select Classroom Images</h3>
+            <p>Click here or drag and drop multiple images</p>
+            <p style="color: #718096; font-size: 14px;">Supported formats: JPG, JPEG, PNG</p>
+          </div>
+          
+          <input type="file" 
+                 id="fileInput" 
+                 name="classroom_images" 
+                 accept="image/*" 
+                 multiple 
+                 style="display: none;" 
+                 onchange="previewImages()" />
+        </div>
+
+        <div id="previewSection" style="display: none;">
+          <h3>📋 Selected Images (<span id="imageCount">0</span>)</h3>
+          <div id="imagePreviewGrid" class="image-preview-grid"></div>
+        </div>
+
+        <div class="action-buttons">
+          <button type="submit" class="btn btn-large btn-success" id="submitBtn" disabled>
+            ✅ Process Attendance
+          </button>
+          <button type="button" class="btn btn-large btn-warning" onclick="clearImages()">
+            🔄 Clear Images
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let selectedFiles = [];
+
+    function previewImages() {
+      const fileInput = document.getElementById('fileInput');
+      const files = Array.from(fileInput.files);
+      selectedFiles = files;
+      
+      const previewSection = document.getElementById('previewSection');
+      const previewGrid = document.getElementById('imagePreviewGrid');
+      const imageCount = document.getElementById('imageCount');
+      const submitBtn = document.getElementById('submitBtn');
+      
+      if (files.length === 0) {
+        previewSection.style.display = 'none';
+        submitBtn.disabled = true;
+        return;
+      }
+      
+      previewSection.style.display = 'block';
+      imageCount.textContent = files.length;
+      submitBtn.disabled = false;
+      
+      previewGrid.innerHTML = '';
+      
+      files.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const previewItem = document.createElement('div');
+          previewItem.className = 'preview-item';
+          previewItem.innerHTML = `
+            <img src="${e.target.result}" alt="Classroom ${index + 1}">
+            <button type="button" class="remove-btn" onclick="removeImage(${index})">×</button>
+          `;
+          previewGrid.appendChild(previewItem);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function removeImage(index) {
+      const dt = new DataTransfer();
+      const files = Array.from(document.getElementById('fileInput').files);
+      
+      files.forEach((file, i) => {
+        if (i !== index) {
+          dt.items.add(file);
+        }
+      });
+      
+      document.getElementById('fileInput').files = dt.files;
+      previewImages();
+    }
+
+    function clearImages() {
+      document.getElementById('fileInput').value = '';
+      document.getElementById('previewSection').style.display = 'none';
+      document.getElementById('submitBtn').disabled = true;
+      selectedFiles = [];
+    }
+
+    // Drag and drop functionality
+    const uploadZone = document.querySelector('.upload-zone');
+    
+    uploadZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      uploadZone.classList.add('dragover');
+    });
+    
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('dragover');
+    });
+    
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('dragover');
+      
+      const files = Array.from(e.dataTransfer.files);
+      const imageFiles = files.filter(file => file.type.startsWith('image/'));
+      
+      if (imageFiles.length > 0) {
+        const dt = new DataTransfer();
+        imageFiles.forEach(file => dt.items.add(file));
+        document.getElementById('fileInput').files = dt.files;
+        previewImages();
+      }
+    });
+
+    // Form validation
+    document.getElementById('uploadForm').addEventListener('submit', function(e) {
+      const files = document.getElementById('fileInput').files;
+      
+      if (files.length === 0) {
+        e.preventDefault();
+        alert('Please select at least one classroom image.');
+        return false;
+      }
+      
+      if (files.length > 10) {
+        e.preventDefault();
+        alert('Please select no more than 10 images for optimal processing.');
+        return false;
+      }
+      
+      // Show loading state
+      document.getElementById('submitBtn').innerHTML = '⏳ Processing...';
+      document.getElementById('submitBtn').disabled = true;
+    });
+  </script>
+</body>
+</html>
