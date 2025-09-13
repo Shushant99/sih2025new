@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sample Images Management - SmartAttend</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .image-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s;
+        }
+        .image-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .image-preview {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            cursor: pointer;
+        }
+        .quality-high { color: #28a745; }
+        .quality-medium { color: #ffc107; }
+        .quality-low { color: #dc3545; }
+        .filters-section {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <div class="col-12">
+                <h2 class="mb-4">
+                    <i class="fas fa-images"></i> Sample Images Management
+                </h2>
+
+                <!-- Filters -->
+                <div class="filters-section">
+                    <div class="row align-items-end">
+                        <div class="col-md-3">
+                            <label class="form-label">Status Filter</label>
+                            <select class="form-select" id="statusFilter">
+                                <option value="all">All Status</option>
+                                <option value="pending">Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Class Filter</label>
+                            <select class="form-select" id="classFilter">
+                                <option value="all">All Classes</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Search Student</label>
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search by name or ID...">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary" onclick="applyFilters()">
+                                <i class="fas fa-search"></i> Filter
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bulk Actions -->
+                <div class="mb-3">
+                    <div class="d-flex gap-2 align-items-center">
+                        <input type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                        <label for="selectAll" class="form-label mb-0">Select All</label>
+                        <button class="btn btn-success btn-sm" onclick="bulkAction('approve')" id="bulkApprove" disabled>
+                            <i class="fas fa-check"></i> Approve Selected
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="bulkAction('reject')" id="bulkReject" disabled>
+                            <i class="fas fa-times"></i> Reject Selected
+                        </button>
+                        <span class="ms-auto text-muted" id="resultsInfo"></span>
+                    </div>
+                </div>
+
+                <!-- Images Grid -->
+                <div id="imagesGrid" class="row">
+                </div>
+
+                <!-- Pagination -->
+                <div class="d-flex justify-content-center mt-4">
+                    <nav>
+                        <ul class="pagination" id="pagination">
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Detail Modal -->
+    <div class="modal fade" id="imageModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Image Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalContent">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-success" onclick="approveImage()" id="modalApprove">
+                        <i class="fas fa-check"></i> Approve
+                    </button>
+                    <button type="button" class="btn btn-danger" onclick="rejectImage()" id="modalReject">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rejection Reason Modal -->
+    <div class="modal fade" id="rejectModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Rejection Reason</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Select Reason:</label>
+                        <select class="form-select" id="rejectionReason">
+                            <option value="Poor image quality">Poor image quality</option>
+                            <option value="Blurry image">Blurry image</option>
+                            <option value="Multiple faces detected">Multiple faces detected</option>
+                            <option value="Face not clearly visible">Face not clearly visible</option>
+                            <option value="Wrong orientation">Wrong orientation</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Additional Comments:</label>
+                        <textarea class="form-control" id="additionalComments" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" onclick="confirmReject()">Reject Image</button>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="static/js/sample_images.js"></script>
+</body>
+</html>

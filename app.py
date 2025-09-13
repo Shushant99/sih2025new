@@ -242,7 +242,7 @@ def view_attendance():
     try:
         files = sorted(os.listdir(class_report_dir), reverse=True)
     except Exception:
-        files = []
+        files = []  
     return render_template("reports.html", files=files)
 # ==============================
 # Admin Routes
@@ -440,6 +440,231 @@ def get_class_report_dir(class_name):
     os.makedirs(path, exist_ok=True)
     return path
 
+# Add these routes to your app.py for Admin Reports
+
+@app.route('/admin/reports')
+def admin_reports():
+    """Admin reports dashboard"""
+    return render_template('admin_reports.html')
+
+@app.route('/api/admin/students-overview')
+def admin_students_overview():
+    """Get overview of all students with sample images and attendance"""
+    class_filter = request.args.get('class', 'all')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    search_query = request.args.get('search', '')
+
+    conn = sqlite3.connect('attendance.db')
+    conn.row_factory = sqlite3.Row
+
+    # Base query to get students from sample_images table
+    base_query = """
+        SELECT DISTINCT 
+            s.student_id,
+            s.student_name,
+            s.class_name,
+            COUNT(CASE WHEN s.status = 'approved' THEN 1 END) as approved_samples,
+            COUNT(CASE WHEN s.status = 'pending' THEN 1 END) as pending_samples,
+            COUNT(CASE WHEN s.status = 'rejected' THEN 1 END) as rejected_samples,
+            COUNT(*) as total_samples,
+            MAX(s.upload_date) as last_upload
+        FROM sample_images s
+        WHERE 1=1
+    """
+    params = []
+
+    if class_filter != 'all':
+        base_query += " AND s.class_name = ?"
+        params.append(class_filter)
+
+    if search_query:
+        base_query += " AND (s.student_name LIKE ? OR s.student_id LIKE ?)"
+        params.extend([f'%{search_query}%', f'%{search_query}%'])
+
+    base_query += " GROUP BY s.student_id, s.student_name, s.class_name"
+
+    # Get total count for pagination
+    count_query = f"SELECT COUNT(*) FROM ({base_query}) as subquery"
+    total_count = conn.execute(count_query, params).fetchone()[0]
+
+    # Add pagination
+    base_query += " ORDER BY s.student_name LIMIT ? OFFSET ?"
+    params.extend([per_page, (page - 1) * per_page])
+
+    cursor = conn.execute(base_query, params)
+    students = []
+
+    for row in cursor.fetchall():
+        student_data = dict(row)
+
+        # Get attendance statistics for this student
+        attendance_query = """
+            SELECT 
+                COUNT(*) as total_classes,
+                SUM(CASE WHEN status = 'Present' THEN 1 ELSE 0 END) as present_count
+            FROM attendance_records 
+            WHERE student_name = ? AND class_name = ?
+        """
+
+        attendance_result = conn.execute(attendance_query, 
+                                       (student_data['student_name'], student_data['class_name'])).fetchone()
+
+        if attendance_result and attendance_result[0] > 0:
+            student_data['total_classes'] = attendance_result[0]
+            student_data['present_count'] = attendance_result[1]
+            student_data['attendance_percentage'] = round((attendance_result[1] / attendance_result[0]) * 100, 1)
+        else:
+            student_data['total_classes'] = 0
+            student_data['present_count'] = 0
+            student_data['attendance_percentage'] = 0.0
+
+        students.append(student_data)
+
+    conn.close()
+
+    return jsonify({
+        'students': students,
+        'total': total_count,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': (total_count + per_page - 1) // per_page
+    })
+
+@app.route('/api/admin/attendance-records')
+def admin_attendance_records():
+    """Get detailed attendance records"""
+    class_filter = request.args.get('class', 'all')
+    date_from = request.args.get('date_from', '')
+    date_to = request.args.get('date_to', '')
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 50, type=int)
+
+    conn = sqlite3.connect('attendance.db')
+    conn.row_factory = sqlite3.Row
+
+    base_query = """
+        SELECT 
+            student_name,
+            class_name,
+            date,
+            time,
+            status,
+            confidence
+        FROM attendance_records
+        WHERE 1=1
+    """
+    params = []
+
+    if class_filter != 'all':
+        base_query += " AND class_name = ?"
+        params.append(class_filter)
+
+    if date_from:
+        base_query += " AND date >= ?"
+        params.append(date_from)
+
+    if date_to:
+        base_query += " AND date <= ?"
+        params.append(date_to)
+
+    # Get total count
+    count_query = base_query.replace('SELECT student_name, class_name, date, time, status, confidence', 'SELECT COUNT(*)')
+    total_count = conn.execute(count_query, params).fetchone()[0]
+
+    # Add pagination
+    base_query += " ORDER BY date DESC, time DESC LIMIT ? OFFSET ?"
+    params.extend([per_page, (page - 1) * per_page])
+
+    cursor = conn.execute(base_query, params)
+    records = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return jsonify({
+        'records': records,
+        'total': total_count,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': (total_count + per_page - 1) // per_page
+    })
+
+@app.route('/api/admin/student-detail/<student_id>')
+def admin_student_detail(student_id):
+    """Get detailed information about a specific student"""
+    conn = sqlite3.connect('attendance.db')
+    conn.row_factory = sqlite3.Row
+
+    # Get student's sample images
+    sample_images = conn.execute("""
+        SELECT id, image_filename, upload_date, status, quality_score, rejection_reason
+        FROM sample_images 
+        WHERE student_id = ?
+        ORDER BY upload_date DESC
+    """, (student_id,)).fetchall()
+
+    # Get student's attendance records
+    attendance_records = conn.execute("""
+        SELECT date, time, status, confidence, class_name
+        FROM attendance_records 
+        WHERE student_id = ? OR student_name IN (
+            SELECT DISTINCT student_name FROM sample_images WHERE student_id = ?
+        )
+        ORDER BY date DESC, time DESC
+        LIMIT 50
+    """, (student_id, student_id)).fetchall()
+
+    conn.close()
+
+    return jsonify({
+        'sample_images': [dict(img) for img in sample_images],
+        'attendance_records': [dict(rec) for rec in attendance_records]
+    })
+
+@app.route('/api/admin/class-statistics')
+def admin_class_statistics():
+    """Get statistics by class"""
+    conn = sqlite3.connect('attendance.db')
+    conn.row_factory = sqlite3.Row
+
+    # Get sample image stats by class
+    sample_stats = conn.execute("""
+        SELECT 
+            class_name,
+            COUNT(DISTINCT student_id) as total_students,
+            COUNT(*) as total_samples,
+            COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_samples,
+            COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_samples,
+            COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_samples
+        FROM sample_images
+        WHERE class_name IS NOT NULL
+        GROUP BY class_name
+        ORDER BY class_name
+    """).fetchall()
+
+    # Get attendance stats by class
+    attendance_stats = conn.execute("""
+        SELECT 
+            class_name,
+            COUNT(*) as total_records,
+            COUNT(CASE WHEN status = 'Present' THEN 1 END) as present_records,
+            COUNT(DISTINCT student_name) as unique_students,
+            COUNT(DISTINCT date) as unique_dates
+        FROM attendance_records
+        WHERE class_name IS NOT NULL
+        GROUP BY class_name
+        ORDER BY class_name
+    """).fetchall()
+
+    conn.close()
+
+    return jsonify({
+        'sample_stats': [dict(row) for row in sample_stats],
+        'attendance_stats': [dict(row) for row in attendance_stats]
+    })
+
+
+
+
 
 @app.route("/download_report/<filename>")
 def download_report(filename):
@@ -468,7 +693,183 @@ def download_report(filename):
     except Exception as e:
         flash(f"Error downloading report: {str(e)}")
         return redirect(url_for('view_attendance'))
+# Add these routes to your app.py
 
+from flask import Flask, render_template, request, jsonify, send_from_directory
+import sqlite3
+import os
+from datetime import datetime
+
+@app.route('/admin/sample-images')
+def admin_sample_images():
+    """Admin page to view all sample images"""
+    return render_template('admin_sample_images.html')
+
+@app.route('/api/sample-images')
+def get_sample_images():
+    """API to fetch sample images with filters"""
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
+    status_filter = request.args.get('status', 'all')
+    class_filter = request.args.get('class', 'all')
+    search_query = request.args.get('search', '')
+
+    conn = sqlite3.connect('attendance.db')
+    conn.row_factory = sqlite3.Row
+
+    # Build query with filters
+    base_query = """
+        SELECT id, student_id, student_name, image_filename, image_path, 
+               upload_date, status, quality_score, class_name, file_size,
+               rejection_reason, approved_by, approval_date
+        FROM sample_images 
+        WHERE 1=1
+    """
+    params = []
+
+    if status_filter != 'all':
+        base_query += " AND status = ?"
+        params.append(status_filter)
+
+    if class_filter != 'all':
+        base_query += " AND class_name = ?"
+        params.append(class_filter)
+
+    if search_query:
+        base_query += " AND (student_name LIKE ? OR student_id LIKE ?)"
+        params.extend([f'%{search_query}%', f'%{search_query}%'])
+
+    # Get total count
+    count_query = base_query.replace('SELECT id, student_id, student_name, image_filename, image_path, upload_date, status, quality_score, class_name, file_size, rejection_reason, approved_by, approval_date', 'SELECT COUNT(*)')
+    total_count = conn.execute(count_query, params).fetchone()[0]
+
+    # Add pagination
+    base_query += " ORDER BY upload_date DESC LIMIT ? OFFSET ?"
+    params.extend([per_page, (page - 1) * per_page])
+
+    cursor = conn.execute(base_query, params)
+    images = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    return jsonify({
+        'images': images,
+        'total': total_count,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': (total_count + per_page - 1) // per_page
+    })
+
+@app.route('/api/sample-image/<int:image_id>')
+def get_sample_image_details(image_id):
+    """Get detailed information about a specific sample image"""
+    conn = sqlite3.connect('attendance.db')
+    conn.row_factory = sqlite3.Row
+
+    cursor = conn.execute("SELECT * FROM sample_images WHERE id = ?", (image_id,))
+    image = cursor.fetchone()
+    conn.close()
+
+    if image:
+        return jsonify(dict(image))
+    else:
+        return jsonify({'error': 'Image not found'}), 404
+
+@app.route('/api/sample-image/<int:image_id>/approve', methods=['POST'])
+def approve_sample_image(image_id):
+    """Approve a sample image"""
+    admin_id = request.json.get('admin_id', 'admin')
+
+    conn = sqlite3.connect('attendance.db')
+    conn.execute("""
+        UPDATE sample_images 
+        SET status = 'approved', 
+            approved_by = ?, 
+            approval_date = CURRENT_TIMESTAMP 
+        WHERE id = ?
+    """, (admin_id, image_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True, 'message': 'Image approved successfully'})
+
+@app.route('/api/sample-image/<int:image_id>/reject', methods=['POST'])
+def reject_sample_image(image_id):
+    """Reject a sample image"""
+    admin_id = request.json.get('admin_id', 'admin')
+    reason = request.json.get('reason', 'Quality not acceptable')
+
+    conn = sqlite3.connect('attendance.db')
+    conn.execute("""
+        UPDATE sample_images 
+        SET status = 'rejected', 
+            rejection_reason = ?,
+            approved_by = ?, 
+            approval_date = CURRENT_TIMESTAMP 
+        WHERE id = ?
+    """, (reason, admin_id, image_id))
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True, 'message': 'Image rejected successfully'})
+
+@app.route('/api/sample-images/bulk-action', methods=['POST'])
+def bulk_sample_action():
+    """Handle bulk actions on sample images"""
+    action = request.json.get('action')
+    image_ids = request.json.get('image_ids', [])
+    admin_id = request.json.get('admin_id', 'admin')
+    reason = request.json.get('reason', 'Bulk action')
+
+    if not image_ids:
+        return jsonify({'error': 'No images selected'}), 400
+
+    conn = sqlite3.connect('attendance.db')
+
+    if action == 'approve':
+        placeholders = ','.join(['?' for _ in image_ids])
+        conn.execute(f"""
+            UPDATE sample_images 
+            SET status = 'approved', 
+                approved_by = ?, 
+                approval_date = CURRENT_TIMESTAMP 
+            WHERE id IN ({placeholders})
+        """, [admin_id] + image_ids)
+        message = f'{len(image_ids)} images approved successfully'
+
+    elif action == 'reject':
+        placeholders = ','.join(['?' for _ in image_ids])
+        conn.execute(f"""
+            UPDATE sample_images 
+            SET status = 'rejected', 
+                rejection_reason = ?,
+                approved_by = ?, 
+                approval_date = CURRENT_TIMESTAMP 
+            WHERE id IN ({placeholders})
+        """, [reason, admin_id] + image_ids)
+        message = f'{len(image_ids)} images rejected successfully'
+
+    else:
+        conn.close()
+        return jsonify({'error': 'Invalid action'}), 400
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({'success': True, 'message': message})
+
+@app.route('/uploads/samples/<filename>')
+def serve_sample_image(filename):
+    """Serve sample images"""
+    return send_from_directory('database/photo', filename)
+
+@app.route('/api/classes')
+def get_classes():
+    """Get list of all classes for filtering"""
+    conn = sqlite3.connect('attendance.db')
+    cursor = conn.execute("SELECT DISTINCT class_name FROM sample_images WHERE class_name IS NOT NULL")
+    classes = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return jsonify(classes)
 # Create class subdirectories as needed
 
 
