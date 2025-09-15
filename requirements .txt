@@ -1,4 +1,5 @@
 #this file is for listing the dependencies required for the project.
+gunicorn
 flask 
 pillow 
 openpyxl 
