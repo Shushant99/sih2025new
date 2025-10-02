@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Dashboard - Smart Attendance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
+    <style>
+        .nav-tabs .nav-link {
+            color: #495057;
+        }
+
+        .nav-tabs .nav-link.active {
+            background-color: #0d6efd;
+            color: white;
+            border-color: #0d6efd;
+        }
+
+        .student-card {
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+
+        .student-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .image-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s;
+        }
+
+        .image-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .image-preview {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            cursor: pointer;
+        }
+
+        .quality-high {
+            color: #28a745;
+        }
+
+        .quality-medium {
+            color: #ffc107;
+        }
+
+        .quality-low {
+            color: #dc3545;
+        }
+
+        .filters-section {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+        }
+
+        .status-active {
+            color: #38a169;
+            font-weight: bold;
+        }
+
+        .status-inactive {
+            color: #e53e3e;
+            font-weight: bold;
+        }
+
+        .user-table {
+            font-size: 14px;
+        }
+
+        .login-time {
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .captured-images-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .captured-image-item {
+            position: relative;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .captured-image-item img {
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+        }
+
+        .remove-image-btn {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background: #e53e3e;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 25px;
+            height: 25px;
+            cursor: pointer;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .capture-counter {
+            background: #38a169;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            margin-left: 10px;
+        }
+
+        .camera-controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container-fluid p-3">
+        <div class="nav-header d-flex justify-content-between align-items-center mb-3">
+            <h1>⚙️ Administrator Dashboard</h1>
+            <div>
+                Logged in as: <strong>{{ session.userid }}</strong>
+                <a href="{{ url_for('logout') }}" class="btn btn-danger ms-3">Logout</a>
+            </div>
+        </div>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %}
+        <ul class="flash-messages">
+            {% for msg in messages %}
+            <li class="{% if 'success' in msg.lower() %}flash-success{% endif %}">{{ msg }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% endwith %}
+
+        <!-- Dashboard Statistics -->
+        <div class="stats-container row mb-4">
+            <div class="col">
+                <div class="stat-card text-center">
+                    <div class="stat-number">{{ total_users }}</div>
+                    <div class="stat-label">Total Users</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="stat-card text-center">
+                    <div class="stat-number">{{ total_teachers }}</div>
+                    <div class="stat-label">Teachers</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="stat-card text-center">
+                    <div class="stat-number">{{ total_admins }}</div>
+                    <div class="stat-label">Admins</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="stat-card text-center">
+                    <div class="stat-number">{{ total_classes }}</div>
+                    <div class="stat-label">Classes</div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="stat-card text-center">
+                    <div class="stat-number">{{ reports|length if reports else 0 }}</div>
+                    <div class="stat-label">Reports</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Navigation Tabs -->
+        <ul class="nav nav-tabs" id="adminTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="users-tab" data-bs-toggle="tab" data-bs-target="#users"
+                    type="button" role="tab">
+                    <i class="fas fa-users"></i> User Management
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="samples-tab" data-bs-toggle="tab" data-bs-target="#samples" type="button"
+                    role="tab">
+                    <i class="fas fa-images"></i> Student Samples
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="reports-tab" data-bs-toggle="tab" data-bs-target="#reports" type="button"
+                    role="tab">
+                    <i class="fas fa-chart-bar"></i> Attendance Reports
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content mt-3" id="adminTabContent">
+
+            <!-- User Management Tab -->
+            <div class="tab-pane fade show active" id="users" role="tabpanel">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="feature-card">
+                            <h4><i class="fas fa-user-plus"></i> Add New Teacher</h4>
+                            <p>Create teacher accounts and assign classes</p>
+                            <a href="{{ url_for('add_teacher') }}" class="btn btn-success">Add Teacher</a>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="feature-card">
+                            <h4><i class="fas fa-users-cog"></i> Manage Users</h4>
+                            <p>View user login activity and account details</p>
+                            <button class="btn btn-primary" onclick="refreshUserData()">Refresh Data</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- User Login Details Table -->
+                <h4>👩‍🏫 User Accounts & Login Activity</h4>
+                <div class="table-responsive">
+                    <table class="table table-striped user-table">
+                        <thead>
+                            <tr>
+                                <th>👤 User ID</th>
+                                <th>🎭 Role</th>
+                                <th>🏫 Class</th>
+                                <th>📊 Status</th>
+                                <th>🕐 Last Login</th>
+                                <th>🔢 Logins</th>
+                                <th>🔧 Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in user_list %}
+                            <tr>
+                                <td><strong>{{ user.userid }}</strong></td>
+                                <td>
+                                    {% if user.role == 'admin' %}
+                                    <span style="color: #e53e3e;">🔐 {{ user.role|title }}</span>
+                                    {% else %}
+                                    <span style="color: #38a169;">👨‍🏫 {{ user.role|title }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if user.class != 'N/A' %}
+                                    <span style="color: #667eea;">{{ user.class }}</span>
+                                    {% else %}
+                                    <span style="color: #a0aec0;">{{ user.class }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <span class="status-{{ user.status|lower }}">
+                                        {% if user.status == 'Active' %}🟢{% else %}🔴{% endif %} {{ user.status }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if user.last_login != 'Never' %}
+                                    <div>{{ user.last_login.split(' ')[0] }}</div>
+                                    <div class="login-time">{{ user.last_login.split(' ')[1] }}</div>
+                                    <div class="login-time">{{ user.last_login_display.split('(')[1].rstrip(')') if '('
+                                        in user.last_login_display else '' }}</div>
+                                    {% else %}
+                                    <span style="color: #a0aec0;">Never logged in</span>
+                                    {% endif %}
+                                </td>
+                                <td style="text-align: center;">
+                                    <span style="font-weight: bold; color: #667eea;">{{ user.login_count }}</span>
+                                </td>
+                                <td>
+                                    {% if user.role == 'teacher' %}
+                                    <button class="btn btn-sm btn-warning"
+                                        onclick="resetUserPassword('{{ user.userid }}')">🔄 Reset</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Student Samples Tab -->
+            <div class="tab-pane fade" id="samples" role="tabpanel">
+                <!-- Add New Student Section -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="feature-card">
+                            <h4><i class="fas fa-user-graduate"></i> Register New Student</h4>
+
+                            <form id="uploadForm" action="{{ url_for('upload_samples') }}" method="POST"
+                                enctype="multipart/form-data">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="class_name" class="form-label">🏫 Class Name</label>
+                                            <select id="class_name" name="class_name" class="form-select" required>
+                                                <option value="">Select Class</option>
+                                                {% for cls in class_list %}
+                                                <option value="{{ cls }}">{{ cls }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="student_name" class="form-label">👤 Student Name</label>
+                                            <input type="text" id="student_name" name="student_name"
+                                                class="form-control" placeholder="e.g., John Doe" required />
+                                        </div>
+
+                                        <div class="mb-3">
+                                            <label for="sample_images" class="form-label">📷 Upload Sample
+                                                Images</label>
+                                            <input type="file" id="sample_images" name="sample_images"
+                                                class="form-control" accept="image/*" multiple />
+                                            <small class="text-muted">Select multiple photos of the student</small>
+                                        </div>
+                                    </div>
+
+                                    <div class="col-md-6">
+                                        <div class="feature-card">
+                                            <h5>📸 Camera Capture
+                                                <span id="captureCounter" class="capture-counter">0 Photos</span>
+                                            </h5>
+                                            <div class="camera-section text-center">
+                                                <video id="video" width="320" height="240" autoplay></video>
+                                                <canvas id="canvas" width="320" height="240"
+                                                    style="display:none;"></canvas>
+
+                                                <div class="camera-controls">
+                                                    <button type="button" class="btn btn-success"
+                                                        onclick="capturePhoto()">
+                                                        📷 Capture Photo
+                                                    </button>
+                                                    <button type="button" class="btn btn-warning"
+                                                        onclick="clearAllCaptured()">
+                                                        🗑️ Clear All
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Hidden container for captured images data -->
+                                            <div id="capturedImagesContainer"></div>
+
+                                            <!-- Preview container for captured images -->
+                                            <div id="previewContainer">
+                                                <h6 style="margin-top: 20px;">📸 Captured Photos:</h6>
+                                                <div id="capturedImagesGrid" class="captured-images-grid"></div>
+                                                <p id="noPhotosMessage"
+                                                    style="color: #718096; text-align: center; margin-top: 10px;">
+                                                    No photos captured yet.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="text-center">
+                                    <button type="submit" class="btn btn-success btn-lg">✅ Register Student</button>
+                                    <button type="reset" class="btn btn-warning btn-lg" onclick="resetForm()">🔄 Clear
+                                        Form</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sample Images Filter and Display -->
+                <div class="filters-section mb-3">
+                    <div class="row align-items-end">
+                        <div class="col-md-3">
+                            <label for="classFilterSamples" class="form-label">Class Filter</label>
+                            <select id="classFilterSamples" class="form-select">
+                                <option value="all">All Classes</option>
+                                {% for cls in class_list %}
+                                <option value="{{ cls }}">{{ cls }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="searchSampleInput" class="form-label">Search Student</label>
+                            <input type="text" id="searchSampleInput" class="form-control"
+                                placeholder="Search by name or ID...">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary" onclick="loadSampleImages()">Filter</button>
+                        </div>
+                        <div class="col-md-3 text-end" id="samplesResultsInfo"></div>
+                    </div>
+                </div>
+
+                <div id="samplesGrid" class="row row-cols-1 row-cols-md-3 g-3">
+                    <!-- dynamically generated -->
+                </div>
+
+                <nav aria-label="Sample images pagination" class="mt-3">
+                    <ul id="samplesPagination" class="pagination justify-content-center"></ul>
+                </nav>
+            </div>
+
+            <!-- Attendance Reports Tab -->
+            <div class="tab-pane fade" id="reports" role="tabpanel">
+                <div class="filters-section mb-3">
+                    <div class="row align-items-end">
+                        <div class="col-md-3">
+                            <label for="classFilterReports" class="form-label">Class Filter</label>
+                            <select id="classFilterReports" class="form-select">
+                                <option value="all">All Classes</option>
+                                {% for cls in class_list %}
+                                <option value="{{ cls }}">{{ cls }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label for="dateFrom" class="form-label">From Date</label>
+                            <input type="date" id="dateFrom" class="form-control">
+                        </div>
+                        <div class="col-md-2">
+                            <label for="dateTo" class="form-label">To Date</label>
+                            <input type="date" id="dateTo" class="form-control">
+                        </div>
+                        <div class="col-md-2">
+                            <button class="btn btn-primary" onclick="loadReports()">Filter</button>
+                        </div>
+                        <div class="col-md-3 text-end" id="reportsResultsInfo"></div>
+                    </div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>📄 Report Name</th>
+                                <th>📅 Date</th>
+                                <th>⏰ Time</th>
+                                <th>🔗 Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportsTableBody">
+                            {% for report in reports[:10] %}
+                            {% set filename = report.split('/')[-1] %}
+                            {% set file_parts = filename.replace('attendance_', '').replace('.xlsx', '').split('_') %}
+                            <tr>
+                                <td>{{ report }}</td>
+                                <td>
+                                    {% if file_parts|length >= 2 %}
+                                    {{ file_parts[1] }} {# Date part #}
+                                    {% else %}
+                                    Unknown
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if file_parts|length >= 3 %}
+                                    {{ file_parts[2].replace('-', ':') }} {# Time part #}
+                                    {% else %}
+                                    Unknown
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('download_report', filename=report) }}"
+                                        class="btn btn-success btn-sm">Download</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+
+                        </tbody>
+                    </table>
+                </div>
+
+                <nav aria-label="Reports pagination" class="mt-3">
+                    <ul id="reportsPagination" class="pagination justify-content-center"></ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Initialize date fields
+            let today = new Date();
+            document.getElementById('dateTo').value = today.toISOString().split('T')[0];
+            let thirtyDaysAgo = new Date(today.getTime() - (30 * 24 * 60 * 60 * 1000));
+            document.getElementById('dateFrom').value = thirtyDaysAgo.toISOString().split('T')[0];
+
+            // Initialize camera
+            initCamera();
+
+            // Load initial data
+            loadSampleImages();
+            loadReports();
+        });
+
+        // Camera functionality for student registration
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const capturedImagesGrid = document.getElementById("capturedImagesGrid");
+        const capturedImagesContainer = document.getElementById("capturedImagesContainer");
+        const captureCounter = document.getElementById("captureCounter");
+        const noPhotosMessage = document.getElementById("noPhotosMessage");
+
+        let capturedImages = [];
+        let imageCounter = 0;
+
+        function initCamera() {
+            if (video) {
+                navigator.mediaDevices
+                    .getUserMedia({ video: true })
+                    .then((stream) => {
+                        video.srcObject = stream;
+                    })
+                    .catch((err) => {
+                        const cameraSection = document.querySelector('.camera-section');
+                        if (cameraSection) {
+                            cameraSection.innerHTML = '<p style="color: #e53e3e;">Camera not available: ' + err + '</p>';
+                        }
+                    });
+            }
+        }
+
+        function capturePhoto() {
+            if (!video || !canvas) return;
+
+            const context = canvas.getContext("2d");
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+            const imageData = canvas.toDataURL("image/jpeg");
+            const imageId = 'captured_' + Date.now() + '_' + imageCounter++;
+
+            capturedImages.push({
+                id: imageId,
+                data: imageData
+            });
+
+            // Create hidden input
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'captured_images';
+            hiddenInput.value = imageData;
+            hiddenInput.id = imageId + '_input';
+            capturedImagesContainer.appendChild(hiddenInput);
+
+            // Create preview
+            const imagePreview = document.createElement('div');
+            imagePreview.className = 'captured-image-item';
+            imagePreview.id = imageId + '_preview';
+            imagePreview.innerHTML = `
+        <img src="${imageData}" alt="Captured ${capturedImages.length}">
+        <button type="button" class="remove-image-btn" onclick="removeImage('${imageId}')">×</button>
+    `;
+
+            capturedImagesGrid.appendChild(imagePreview);
+            updateUI();
+
+            // Visual feedback
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = "✅ Photo Captured!";
+            btn.style.background = "#38a169";
+            setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.background = "";
+            }, 1500);
+        }
+
+        function removeImage(imageId) {
+            capturedImages = capturedImages.filter(img => img.id !== imageId);
+
+            const hiddenInput = document.getElementById(imageId + '_input');
+            if (hiddenInput) hiddenInput.remove();
+
+            const preview = document.getElementById(imageId + '_preview');
+            if (preview) preview.remove();
+
+            updateUI();
+        }
+
+        function clearAllCaptured() {
+            capturedImages = [];
+            if (capturedImagesGrid) capturedImagesGrid.innerHTML = '';
+            if (capturedImagesContainer) capturedImagesContainer.innerHTML = '';
+            imageCounter = 0;
+            updateUI();
+        }
+
+        function updateUI() {
+            const count = capturedImages.length;
+            if (captureCounter) {
+                captureCounter.textContent = `${count} Photo${count !== 1 ? 's' : ''}`;
+
+                if (count === 0) {
+                    if (noPhotosMessage) noPhotosMessage.style.display = 'block';
+                    captureCounter.style.background = '#718096';
+                } else {
+                    if (noPhotosMessage) noPhotosMessage.style.display = 'none';
+                    if (count < 3) {
+                        captureCounter.style.background = '#ed8936';
+                    } else {
+                        captureCounter.style.background = '#38a169';
+                    }
+                }
+            }
+        }
+
+        function resetForm() {
+            clearAllCaptured();
+            const uploadForm = document.getElementById('uploadForm');
+            if (uploadForm) uploadForm.reset();
+        }
+
+        // Sample Images functionality
+        let currentSamplePage = 1;
+        let currentReportPage = 1;
+
+        function loadSampleImages(page = 1) {
+            const classFilter = document.getElementById('classFilterSamples');
+            const search = document.getElementById('searchSampleInput');
+
+            if (!classFilter || !search) return;
+
+            const params = new URLSearchParams({
+                page: page,
+                per_page: 20,
+                class: classFilter.value,
+                search: search.value
+            });
+
+            fetch('/api/sample-images?' + params.toString())
+                .then(res => res.json())
+                .then(data => {
+                    renderSampleImages(data.images);
+                    renderSamplePagination(data, page);
+                    updateSampleResultsInfo(data);
+                    currentSamplePage = page;
+                })
+                .catch(console.error);
+        }
+
+        function renderSampleImages(images) {
+            const grid = document.getElementById('samplesGrid');
+            if (!grid) return;
+
+            grid.innerHTML = '';
+            if (images.length === 0) {
+                grid.innerHTML = '<div class="col-12"><p class="text-center">No sample images found.</p></div>';
+                return;
+            }
+
+            images.forEach(img => {
+                const col = document.createElement('div');
+                col.className = "col";
+                col.innerHTML = `
+            <div class="image-card h-100">
+                <img src="/uploads/samples/${img.image_filename}" class="image-preview" alt="Sample Image" style="width: 100%; height: 200px; object-fit: cover;"/>
+                <div class="p-3">
+                    <h6>${img.student_name}</h6>
+                    <p class="mb-1">Class: <strong>${img.class_name}</strong></p>
+                    <p class="mb-1">Status: <span class="quality-${img.status.toLowerCase()}">${img.status}</span></p>
+                    <small class="text-muted">Uploaded: ${new Date(img.upload_date).toLocaleDateString()}</small>
+                </div>
+            </div>
+        `;
+                grid.appendChild(col);
+            });
+        }
+
+        function renderSamplePagination(data, page) {
+            const pagination = document.getElementById('samplesPagination');
+            if (!pagination) return;
+
+            pagination.innerHTML = '';
+
+            const prevLi = document.createElement('li');
+            prevLi.className = 'page-item' + (page === 1 ? ' disabled' : '');
+            prevLi.innerHTML = `<a class='page-link' href="#" onclick="loadSampleImages(${page - 1});return false;">Previous</a>`;
+            pagination.appendChild(prevLi);
+
+            for (let i = 1; i <= data.total_pages; i++) {
+                const li = document.createElement('li');
+                li.className = 'page-item ' + (i === page ? 'active' : '');
+                li.innerHTML = `<a class='page-link' href="#" onclick="loadSampleImages(${i});return false;">${i}</a>`;
+                pagination.appendChild(li);
+            }
+
+            const nextLi = document.createElement('li');
+            nextLi.className = 'page-item' + (page === data.total_pages ? ' disabled' : '');
+            nextLi.innerHTML = `<a class='page-link' href="#" onclick="loadSampleImages(${page + 1});return false;">Next</a>`;
+            pagination.appendChild(nextLi);
+        }
+
+        function updateSampleResultsInfo(data) {
+            const info = document.getElementById('samplesResultsInfo');
+            if (!info) return;
+
+            const start = (data.page - 1) * data.per_page + 1;
+            const end = Math.min(data.page * data.per_page, data.total);
+            info.textContent = `Showing ${start}-${end} of ${data.total} sample images`;
+        }
+
+        // Reports functionality
+        function loadReports(page = 1) {
+            const classFilter = document.getElementById('classFilterReports');
+            const dateFrom = document.getElementById('dateFrom');
+            const dateTo = document.getElementById('dateTo');
+
+            if (!classFilter || !dateFrom || !dateTo) return;
+
+            // For now, use existing reports data from template
+            // This can be enhanced to use API later
+            const totalReports = {{ reports| length if reports else 0
+        }};
+        updateReportsResultsInfo({ page: 1, per_page: 10, total: totalReports });
+}
+
+        function updateReportsResultsInfo(data) {
+            const info = document.getElementById('reportsResultsInfo');
+            if (!info) return;
+
+            const start = (data.page - 1) * data.per_page + 1;
+            const end = Math.min(data.page * data.per_page, data.total);
+            info.textContent = `Showing ${start}-${end} of ${data.total} reports`;
+        }
+
+        // User management functions
+        function refreshUserData() {
+            location.reload();
+        }
+
+        function resetUserPassword(userid) {
+            if (confirm(`Reset password for user: ${userid}?\nThis will generate a new temporary password.`)) {
+                alert(`Password reset for ${userid} - Feature coming soon!`);
+            }
+        }
+
+        // Form validation for student registration
+        const uploadForm = document.getElementById('uploadForm');
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', function (e) {
+                const fileInput = document.getElementById('sample_images');
+                const hasFiles = fileInput && fileInput.files.length > 0;
+                const hasCapturedImages = capturedImages.length > 0;
+
+                if (!hasFiles && !hasCapturedImages) {
+                    e.preventDefault();
+                    alert('Please either upload files or capture at least one photo using the camera.');
+                    return false;
+                }
+
+                if (capturedImages.length > 0 && capturedImages.length < 2) {
+                    const confirmSubmit = confirm('You have only captured ' + capturedImages.length + ' photo. For better recognition, it\'s recommended to capture at least 2-3 photos. Do you want to continue?');
+                    if (!confirmSubmit) {
+                        e.preventDefault();
+                        return false;
+                    }
+                }
+            });
+        }
+
+        // Initialize UI
+        updateUI();
+    </script>
+
+</body>
+
+</html>

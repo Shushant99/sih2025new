@@ -1,13 +1,15 @@
-from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash, session
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, flash, session, jsonify
 import os
 import base64
+import sqlite3
 from datetime import datetime
 from io import BytesIO
 from PIL import Image
 from functools import wraps
 import json
+
 from werkzeug.security import generate_password_hash, check_password_hash
-from backend.main import build_class_embeddings, process_classroom_images, generate_excel_report
+from backend.main import build_class_embeddings, process_classroom_images, process_multiple_classroom_images, generate_excel_report
 
 # =============================
 # CONFIG
@@ -26,16 +28,21 @@ os.makedirs(USERS_DIR, exist_ok=True)
 app = Flask(__name__)
 app.secret_key = "sih2025_secret"
 
-# Simple user store for demo (replace with DB in prod)
-users = {
-    'teacher1': {'password': 'teachpass', 'role': 'teacher'},
-    'admin1': {'password': 'adminpass', 'role': 'admin'}
-}
 
 # Load or initialize user database
+def get_all_reports():
+    all_reports = []
+    for root, dirs, files in os.walk(REPORTS_DIR):
+        for file in files:
+            if file.endswith('.xlsx'):
+                rel_dir = os.path.relpath(root, REPORTS_DIR)
+                rel_file = os.path.join(rel_dir, file) if rel_dir != '.' else file
+                all_reports.append(rel_file)
+    return sorted(all_reports, reverse=True)
+
+
 def load_users():
     if not os.path.exists(USERS_FILE):
-        # Create default users
         default_users = {
             "admin1": {
                 "password": generate_password_hash("adminpass"),
@@ -62,7 +69,6 @@ def load_users():
                     raise ValueError("Empty file")
                 return json.loads(data)
         except Exception:
-            # Reset to default if file empty/corrupt
             default_users = {
                 "admin1": {
                     "password": generate_password_hash("adminpass"),
@@ -86,7 +92,7 @@ def save_users(users):
     with open(USERS_FILE, "w") as f:
         json.dump(users, f)
 
-users = load_users()    
+users = load_users()
 
 def get_class_report_dir(class_name):
     """Create and return class-specific report directory"""
@@ -95,7 +101,6 @@ def get_class_report_dir(class_name):
     path = os.path.join(REPORTS_DIR, class_name)
     os.makedirs(path, exist_ok=True)
     return path
-
 
 # Role-based access decorator
 def role_required(role):
@@ -108,41 +113,6 @@ def role_required(role):
             return f(*args, **kwargs)
         return wrapped
     return wrapper
-# New route to add teacher (admin only)
-@app.route("/add_teacher", methods=["GET", "POST"])
-@role_required('admin')
-def add_teacher():
-    if request.method == "POST":
-        new_userid = request.form.get("userid")
-        new_password = request.form.get("password")
-        role = request.form.get("role")
-        class_name = request.form.get("class")  # Get class from form
-        
-        if not new_userid or not new_password or not role:
-            flash("All required fields must be filled.")
-            return redirect(url_for("add_teacher"))
-
-        if new_userid in users:
-            flash("User ID already exists.")
-            return redirect(url_for("add_teacher"))
-
-        new_user = {
-            "password": generate_password_hash(new_password),
-            "role": role,
-            "last_login": "",  # Initialize as empty
-            "login_count": 0   # Initialize login count
-        }
-        
-        # Add class for teachers only
-        if role == "teacher" and class_name:
-            new_user["class"] = class_name
-            
-        users[new_userid] = new_user
-        save_users(users)
-        flash(f"User '{new_userid}' added successfully.")
-        return redirect(url_for("admin_dashboard"))
-
-    return render_template("add_teacher.html")
 
 # ==============================
 # Login and Logout
@@ -184,7 +154,6 @@ def logout():
     session.clear()
     flash("Logged out successfully.")
     return redirect(url_for('login'))
-
 
 # ==============================
 # Teacher Routes
@@ -244,59 +213,6 @@ def view_attendance():
     except Exception:
         files = []  
     return render_template("reports.html", files=files)
-# ==============================
-# Admin Routes
-# ==============================
-
-@app.route("/upload_samples", methods=["GET", "POST"])
-@role_required('admin')
-def upload_samples():
-    if request.method == "POST":
-        class_name = request.form.get("class_name")
-        student_name = request.form.get("student_name")
-
-        if not class_name or not student_name:
-            flash("Class name and student name are required!")
-            return redirect(request.url)
-
-        # Create folders dynamically
-        student_folder = os.path.join(UPLOAD_FOLDER_STUDENTS, class_name, student_name)
-        os.makedirs(student_folder, exist_ok=True)
-
-        total_saved = 0
-
-        # Handle file uploads
-        files = request.files.getlist("sample_images")
-        for file in files:
-            if file and file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
-                file.save(os.path.join(student_folder, file.filename))
-                total_saved += 1
-
-        # Handle multiple captured images from webcam
-        captured_images = request.form.getlist("captured_images")
-        for i, captured_image_data in enumerate(captured_images):
-            if captured_image_data:
-                try:
-                    # Strip base64 header
-                    img_data = captured_image_data.split(",")[1]
-                    img_bytes = base64.b64decode(img_data)
-                    img = Image.open(BytesIO(img_bytes))
-
-                    # Save with unique filename
-                    filename = f"captured_{student_name}_{i+1}_{len(os.listdir(student_folder)) + 1}.jpg"
-                    img.save(os.path.join(student_folder, filename))
-                    total_saved += 1
-                except Exception as e:
-                    flash(f"Error saving captured image {i+1}: {str(e)}")
-
-        if total_saved > 0:
-            flash(f"Successfully saved {total_saved} images for {student_name} in {class_name}.")
-        else:
-            flash("No valid images were saved. Please check your uploads.")
-        
-        return redirect(url_for("upload_samples"))
-
-    return render_template("upload_samples.html")
 
 @app.route("/upload_classroom_images", methods=["GET", "POST"])
 @role_required('teacher')
@@ -363,6 +279,10 @@ def clear_old_classroom_images():
             except Exception as e:
                 print(f"[WARNING] Could not remove {file}: {e}")
 
+# ==============================
+# Admin Routes
+# ==============================
+
 @app.route("/admin_dashboard")
 @role_required('admin')
 def admin_dashboard():
@@ -381,8 +301,11 @@ def admin_dashboard():
     try:
         total_classes = len([d for d in os.listdir(os.path.join('database', 'photo')) 
                            if os.path.isdir(os.path.join('database', 'photo', d))])
+        class_list = [d for d in os.listdir(os.path.join('database', 'photo')) 
+                     if os.path.isdir(os.path.join('database', 'photo', d))]
     except:
         total_classes = 0
+        class_list = []
     
     # Prepare detailed user list with login info
     user_list = []
@@ -422,25 +345,109 @@ def admin_dashboard():
     # Sort by last login (most recent first)
     user_list.sort(key=lambda x: x['last_login'] if x['last_login'] != 'Never' else '1900-01-01', reverse=True)
     
-    return render_template("admin_dashboard.html", 
+    return render_template("admin_dashboard_combined.html", 
                          reports=reports, 
                          user_list=user_list,
                          total_users=total_users,
                          total_teachers=total_teachers,
                          total_admins=total_admins,
-                         total_classes=total_classes)
-# ==============================
-# Shared Routes
-# ==============================
-def get_class_report_dir(class_name):
-    """Create and return class-specific report directory"""
-    if not class_name:
-        return REPORTS_DIR
-    path = os.path.join(REPORTS_DIR, class_name)
-    os.makedirs(path, exist_ok=True)
-    return path
+                         total_classes=total_classes,
+                         class_list=class_list)
 
-# Add these routes to your app.py for Admin Reports
+# New route to add teacher (admin only)
+@app.route("/add_teacher", methods=["GET", "POST"])
+@role_required('admin')
+def add_teacher():
+    if request.method == "POST":
+        new_userid = request.form.get("userid")
+        new_password = request.form.get("password")
+        role = request.form.get("role")
+        class_name = request.form.get("class")  # Get class from form
+        
+        # Restrict admin creation - only allow teachers
+        if role != "teacher":
+            flash("You can only create teacher accounts.")
+            return redirect(url_for("add_teacher"))
+        
+        if not new_userid or not new_password or not role:
+            flash("All required fields must be filled.")
+            return redirect(url_for("add_teacher"))
+
+        if new_userid in users:
+            flash("User ID already exists.")
+            return redirect(url_for("add_teacher"))
+
+        new_user = {
+            "password": generate_password_hash(new_password),
+            "role": role,
+            "last_login": "",  # Initialize as empty
+            "login_count": 0   # Initialize login count
+        }
+        
+        # Add class for teachers only
+        if role == "teacher" and class_name:
+            new_user["class"] = class_name
+            
+        users[new_userid] = new_user
+        save_users(users)
+        flash(f"User '{new_userid}' added successfully.")
+        return redirect(url_for("admin_dashboard"))
+
+    return render_template("add_teacher.html")
+
+@app.route("/upload_samples", methods=["GET", "POST"])
+@role_required('admin')
+def upload_samples():
+    if request.method == "POST":
+        class_name = request.form.get("class_name")
+        student_name = request.form.get("student_name")
+
+        if not class_name or not student_name:
+            flash("Class name and student name are required!")
+            return redirect(request.url)
+
+        # Create folders dynamically
+        student_folder = os.path.join(UPLOAD_FOLDER_STUDENTS, class_name, student_name)
+        os.makedirs(student_folder, exist_ok=True)
+
+        total_saved = 0
+
+        # Handle file uploads
+        files = request.files.getlist("sample_images")
+        for file in files:
+            if file and file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                file.save(os.path.join(student_folder, file.filename))
+                total_saved += 1
+
+        # Handle multiple captured images from webcam
+        captured_images = request.form.getlist("captured_images")
+        for i, captured_image_data in enumerate(captured_images):
+            if captured_image_data:
+                try:
+                    # Strip base64 header
+                    img_data = captured_image_data.split(",")[1]
+                    img_bytes = base64.b64decode(img_data)
+                    img = Image.open(BytesIO(img_bytes))
+
+                    # Save with unique filename
+                    filename = f"captured_{student_name}_{i+1}_{len(os.listdir(student_folder)) + 1}.jpg"
+                    img.save(os.path.join(student_folder, filename))
+                    total_saved += 1
+                except Exception as e:
+                    flash(f"Error saving captured image {i+1}: {str(e)}")
+
+        if total_saved > 0:
+            flash(f"Successfully saved {total_saved} images for {student_name} in {class_name}.")
+        else:
+            flash("No valid images were saved. Please check your uploads.")
+        
+        return redirect(url_for("upload_samples"))
+
+    return render_template("upload_samples.html")
+
+# ==============================
+# Admin API Routes
+# ==============================
 
 @app.route('/admin/reports')
 def admin_reports():
@@ -662,44 +669,36 @@ def admin_class_statistics():
         'attendance_stats': [dict(row) for row in attendance_stats]
     })
 
-
-
-
-
-@app.route("/download_report/<filename>")
+@app.route('/download_report/<path:filename>')
 def download_report(filename):
-    """Download attendance report files"""
+    user_role = session.get('role')
     try:
-        # For teachers, look in their class-specific folder first
-        if session.get('role') == 'teacher':
-            teacher_class = session.get('class')
-            if teacher_class:
-                class_report_dir = get_class_report_dir(teacher_class)
-                class_report_path = os.path.join(class_report_dir, filename)
-                
-                # Check if file exists in class folder
-                if os.path.exists(class_report_path):
-                    return send_from_directory(class_report_dir, filename, as_attachment=True)
+        # Construct full absolute file path
+        full_path = os.path.join(REPORTS_DIR, filename)
         
-        # Fallback: Look in main reports directory
-        main_report_path = os.path.join(REPORTS_DIR, filename)
-        if os.path.exists(main_report_path):
-            return send_from_directory(REPORTS_DIR, filename, as_attachment=True)
+        if not os.path.exists(full_path):
+            flash("Report file not found.")
+            # Redirect based on user role
+            if user_role == 'teacher':
+                return redirect(url_for('view_attendance'))
+            else:
+                return redirect(url_for('admin_dashboard'))
         
-        # If file not found in either location
-        flash("Report file not found.")
-        return redirect(url_for('view_attendance'))
+        # Determine directory and file name for send_from_directory
+        directory = os.path.dirname(full_path)
+        file = os.path.basename(full_path)
         
+        # Serve the file as attachment to trigger download
+        return send_from_directory(directory=directory, filename=file, as_attachment=True)
+    
     except Exception as e:
-        flash(f"Error downloading report: {str(e)}")
-        return redirect(url_for('view_attendance'))
-# Add these routes to your app.py
+        flash(f"Error downloading file: {str(e)}")
+        if user_role == 'teacher':
+            return redirect(url_for('view_attendance'))
+        else:
+            return redirect(url_for('admin_dashboard'))
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
-import sqlite3
-import os
-from datetime import datetime
-
+# Sample Images Management Routes
 @app.route('/admin/sample-images')
 def admin_sample_images():
     """Admin page to view all sample images"""
@@ -865,13 +864,29 @@ def serve_sample_image(filename):
 @app.route('/api/classes')
 def get_classes():
     """Get list of all classes for filtering"""
-    conn = sqlite3.connect('attendance.db')
-    cursor = conn.execute("SELECT DISTINCT class_name FROM sample_images WHERE class_name IS NOT NULL")
-    classes = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    return jsonify(classes)
-# Create class subdirectories as needed
+    try:
+        # Get from database if available
+        conn = sqlite3.connect('attendance.db')
+        cursor = conn.execute("SELECT DISTINCT class_name FROM sample_images WHERE class_name IS NOT NULL")
+        db_classes = [row[0] for row in cursor.fetchall()]
+        conn.close()
+        
+        # Get from filesystem
+        try:
+            fs_classes = [d for d in os.listdir(os.path.join('database', 'photo')) 
+                         if os.path.isdir(os.path.join('database', 'photo', d))]
+        except:
+            fs_classes = []
+        
+        # Combine and deduplicate
+        all_classes = list(set(db_classes + fs_classes))
+        return jsonify(all_classes)
+        
+    except Exception as e:
+        print(f"Error getting classes: {e}")
+        return jsonify([])
 
+from init_db import initialize_database
 
 if __name__ == "__main__":
     app.run(debug=True)

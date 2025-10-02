@@ -10,7 +10,7 @@
   <div class="container">
     <div class="card">
       <div class="nav-header">
-        <h1>👨‍🏫 Add New User</h1>
+        <h1>👨‍🏫 Add New Teacher</h1>
         <a href="{{ url_for('admin_dashboard') }}" class="btn btn-primary">← Back to Dashboard</a>
       </div>
       
@@ -43,7 +43,7 @@
               <select id="role" name="role" required onchange="toggleClassField()">
                 <option value="">Select role</option>
                 <option value="teacher">Teacher</option>
-                <option value="admin">Administrator</option>
+                <!-- Removed Administrator option - Admin can only create teachers -->
               </select>
             </div>
           </div>
@@ -60,16 +60,16 @@
               <h4 style="margin-bottom: 10px; color: #2d3748;">👋 User Guidelines:</h4>
               <ul style="color: #4a5568; line-height: 1.6;">
                 <li><strong>Teachers:</strong> Can capture attendance and view their class reports</li>
-                <li><strong>Admins:</strong> Full system access including user management</li>
                 <li>Passwords should be at least 8 characters long</li>
                 <li>Class assignment is mandatory for teacher accounts</li>
+                <li>Only teacher accounts can be created by admins</li>
               </ul>
             </div>
           </div>
         </div>
 
         <div class="action-buttons">
-          <button type="submit" class="btn btn-large btn-success">✅ Create User</button>
+          <button type="submit" class="btn btn-large btn-success">✅ Create Teacher</button>
           <button type="reset" class="btn btn-large btn-warning">🔄 Clear Form</button>
         </div>
       </form>
